@@ -1,0 +1,17 @@
+name: netdiag
+on:
+  workflow_dispatch: {}
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - name: probes
+        run: |
+          echo "== getent ahosts =="; getent ahosts rpsc.rajasthan.gov.in || true
+          echo "== python getaddrinfo =="; python3 -c "import socket;print(socket.getaddrinfo('rpsc.rajasthan.gov.in',443))" || true
+          echo "== egress ip =="; curl -sS --max-time 20 https://api.ipify.org || true; echo
+          echo "== curl -4 rpsc =="; curl -4 -sS -o /dev/null -w "code=%{http_code} time=%{time_total}\n" --max-time 40 https://rpsc.rajasthan.gov.in/results || echo "FAIL4"
+          echo "== curl -6 rpsc =="; curl -6 -sS -o /dev/null -w "code=%{http_code}\n" --max-time 20 https://rpsc.rajasthan.gov.in/results || echo "FAIL6"
+          echo "== curl default rpsc =="; curl -sS -o /dev/null -w "code=%{http_code}\n" --max-time 40 https://rpsc.rajasthan.gov.in/results || echo "FAILDEF"
+          echo "== curl google =="; curl -sS -o /dev/null -w "code=%{http_code}\n" --max-time 20 https://www.google.com || echo "FAILG"
+          echo "== curl raj gov =="; curl -sS -o /dev/null -w "code=%{http_code}\n" --max-time 25 https://rajasthan.gov.in || echo "FAILRG"

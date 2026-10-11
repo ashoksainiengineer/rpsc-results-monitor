@@ -22,7 +22,9 @@ import hashlib
 import json
 import os
 import re
+import socket
 import sys
+import time
 import urllib.request
 import urllib.error
 from html.parser import HTMLParser
@@ -102,11 +104,39 @@ class ResultsTableParser(HTMLParser):
             self.cell.append(data)
 
 
-def fetch_html(url=PAGE_URL, timeout=60):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read()
-    return raw.decode("utf-8", errors="ignore")
+_IPV4_FORCED = False
+
+
+def _force_ipv4():
+    """Some hosts (incl. rpsc.rajasthan.gov.in) publish an IPv6 (AAAA) record.
+    CI runners often have no IPv6 route, so urlopen fails with
+    'Network is unreachable'. Force IPv4 for every lookup in this process."""
+    global _IPV4_FORCED
+    if _IPV4_FORCED:
+        return
+    _orig = socket.getaddrinfo
+
+    def _ga(host, port, family=0, type=0, proto=0, flags=0):
+        return _orig(host, port, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = _ga
+    _IPV4_FORCED = True
+
+
+def fetch_html(url=PAGE_URL, timeout=60, attempts=3):
+    _force_ipv4()
+    last = None
+    for i in range(1, attempts + 1):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+            return raw.decode("utf-8", errors="ignore")
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if i < attempts:
+                time.sleep(5 * i)
+    raise last
 
 
 def parse_results(html):
