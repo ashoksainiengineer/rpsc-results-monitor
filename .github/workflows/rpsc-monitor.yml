@@ -37,13 +37,16 @@ jobs:
           RPSC_MIN_DATE: "09/10/2026"
         run: python3 monitor.py
 
-      - name: Commit updated state
+      - name: Commit updated state / heartbeat
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json
+          # Weekly heartbeat: GitHub 60 din ki repo inactivity par scheduled
+          # workflow auto-disable kar deta hai; ye commit repo ko active rakhta hai.
+          echo "$(date -u +%Y-W%V)" > heartbeat.txt
+          git add state.json heartbeat.txt
           if git diff --cached --quiet; then
-            echo "No state change to commit."
+            echo "Nothing to commit."
           else
             git commit -m "chore: update RPSC state [skip ci]"
             git push

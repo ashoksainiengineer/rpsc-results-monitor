@@ -361,8 +361,8 @@ def main():
 
     if not new_rows:
         print("No new results.")
-        if not args.dry_run:
-            # keep updated timestamp + prune removed rows
+        if not args.dry_run and seen_now != seen_before:
+            # rows removed from the page -> refresh the stored set
             save_state(args.state, seen_now, 0)
         return 0
 
