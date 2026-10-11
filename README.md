@@ -23,7 +23,8 @@ farak nahi padta. Sab kuch cloud me chalta hai.
 
 ## Settings
 
-- **Frequency**: `.github/workflows/rpsc-monitor.yml` me `cron` badal do.
+- **Frequency**: `.github/workflows/rpsc-monitor.yml` me `cron` badal do
+  (abhi **har 5 minute** — `*/5 * * * *`).
 - **Topic/server**: repo → Settings → Secrets and variables → Actions → `NTFY_TOPIC`
   (aur optional `NTFY_SERVER`).
 - **Sirf kis date ke baad ke results**: workflow me `RPSC_MIN_DATE` (DD/MM/YYYY).

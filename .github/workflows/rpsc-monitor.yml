@@ -2,8 +2,9 @@ name: RPSC Results Monitor
 
 on:
   schedule:
-    # Har 15 minute me chalega (UTC). GitHub kabhi-kabhi 5-15 min delay kar sakta hai.
-    - cron: "*/15 * * * *"
+    # Har 5 minute me chalega (UTC). GitHub ka minimum 5 min hai; bhaari load par
+    # kabhi-kabhi kuch minute delay ho sakta hai.
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 # state.json ko repo me wapas commit karne ke liye write permission
