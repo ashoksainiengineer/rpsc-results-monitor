@@ -31,6 +31,10 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_SERVER: ${{ secrets.NTFY_SERVER }}
+          # RPSC blocks cloud IPs -> relay via reader from CI.
+          RPSC_FORCE_PROXY: "1"
+          # Sirf 09/10/2026 ke baad release hue results par alert.
+          RPSC_MIN_DATE: "09/10/2026"
         run: python3 monitor.py
 
       - name: Commit updated state

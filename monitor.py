@@ -18,11 +18,13 @@ Usage:
 """
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import time
 import urllib.request
@@ -106,6 +108,12 @@ class ResultsTableParser(HTMLParser):
 
 _IPV4_FORCED = False
 
+# RPSC's server blocks cloud/datacenter IPs (GitHub Actions etc.). As a fallback
+# we can relay the request through a reader service that *can* reach it.
+READER_PREFIX = os.environ.get("RPSC_READER", "https://r.jina.ai/")
+# Only notify about results released on/after this date (DD/MM/YYYY). Empty = no limit.
+DEFAULT_MIN_DATE = os.environ.get("RPSC_MIN_DATE", "").strip()
+
 
 def _force_ipv4():
     """Some hosts (incl. rpsc.rajasthan.gov.in) publish an IPv6 (AAAA) record.
@@ -123,20 +131,60 @@ def _force_ipv4():
     _IPV4_FORCED = True
 
 
+def _http_get(url, timeout, headers=None):
+    h = {"User-Agent": UA, "Accept": "text/html"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, headers=h)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="ignore")
+
+
+def _reader_get(url, timeout=180):
+    """Relay through the reader service using curl.
+
+    Some reader services sit behind Cloudflare bot protection which blocks
+    Python's TLS fingerprint (HTTP 403) while allowing curl. So we shell out to
+    curl for this step.
+    """
+    reader_url = READER_PREFIX.rstrip("/") + "/" + url
+    cmd = [
+        "curl", "-sS", "--max-time", str(timeout), "-L",
+        "-H", "X-Return-Format: html",
+        reader_url,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, timeout=timeout + 20)
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", "ignore").strip()[:200]
+        raise RuntimeError(f"curl exit {proc.returncode}: {err}")
+    return proc.stdout.decode("utf-8", "ignore")
+
+
 def fetch_html(url=PAGE_URL, timeout=60, attempts=3):
     _force_ipv4()
-    last = None
+    force_proxy = os.environ.get("RPSC_FORCE_PROXY", "").lower() in ("1", "true", "yes")
+    errors = []
+
+    # 1) Try the site directly (works from residential/Indian networks).
+    if not force_proxy:
+        for i in (1, 2):
+            try:
+                return _http_get(url, timeout=min(timeout, 25))
+            except Exception as e:  # noqa: BLE001
+                errors.append(("direct", e))
+                time.sleep(3 * i)
+
+    # 2) Fallback: relay via a reader service that can reach the site.
     for i in range(1, attempts + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read()
-            return raw.decode("utf-8", errors="ignore")
+            return _reader_get(url)
         except Exception as e:  # noqa: BLE001
-            last = e
+            errors.append(("reader", e))
             if i < attempts:
                 time.sleep(5 * i)
-    raise last
+
+    raise RuntimeError("all fetch methods failed: " +
+                       "; ".join(f"{k}: {v}" for k, v in errors))
 
 
 def parse_results(html):
@@ -173,6 +221,13 @@ def parse_results(html):
 def fingerprint(row):
     key = "|".join([row["date"], row["exam"], row["desc"], row["link"]])
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+
+
+def parse_ddmmyyyy(s):
+    try:
+        return datetime.datetime.strptime(str(s).strip(), "%d/%m/%Y").date()
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -240,6 +295,8 @@ def main():
     ap.add_argument("--token", default=os.environ.get("NTFY_TOKEN", ""))
     ap.add_argument("--dry-run", action="store_true", help="avoid state writes / notifications")
     ap.add_argument("--test", action="store_true", help="send a test notification")
+    ap.add_argument("--min-date", default=DEFAULT_MIN_DATE,
+                    help="only notify results released on/after DD/MM/YYYY")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -287,6 +344,20 @@ def main():
 
     # Preserve page order (newest first).
     log(f"New rows: {len(new_rows)}")
+
+    # Only alert about results released on/after the cutoff date.
+    min_date = parse_ddmmyyyy(args.min_date) if args.min_date else None
+    if min_date and new_rows:
+        kept, skipped = [], 0
+        for r in new_rows:
+            d = parse_ddmmyyyy(r["date"])
+            if d and d >= min_date:
+                kept.append(r)
+            else:
+                skipped += 1
+        if skipped:
+            log(f"Ignored {skipped} new row(s) released before {args.min_date}")
+        new_rows = kept
 
     if not new_rows:
         print("No new results.")

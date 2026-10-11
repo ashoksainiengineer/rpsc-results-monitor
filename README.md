@@ -26,6 +26,20 @@ farak nahi padta. Sab kuch cloud me chalta hai.
 - **Frequency**: `.github/workflows/rpsc-monitor.yml` me `cron` badal do.
 - **Topic/server**: repo → Settings → Secrets and variables → Actions → `NTFY_TOPIC`
   (aur optional `NTFY_SERVER`).
+- **Sirf kis date ke baad ke results**: workflow me `RPSC_MIN_DATE` (DD/MM/YYYY).
+  Abhi `09/10/2026` set hai — isse purane result par alert nahi jayega.
+
+## Note: RPSC cloud IPs block karta hai
+
+`rpsc.rajasthan.gov.in` GitHub/cloud ke IPs se request **timeout** kar deta hai
+(`rajasthan.gov.in` khulta hai, par `rpsc.` subdomain nahi). Isliye CI par ye ek
+reader service (`r.jina.ai`) ke through page fetch karta hai (`RPSC_FORCE_PROXY=1`).
+Local/residential network se direct bhi kaam karta hai. Ek reader alternate hai:
+`RPSC_READER` env se badal sakte ho.
+
+> Public repo hone ki wajah se Actions minutes **unlimited + free** hain (private
+> quota par koi asar nahi).
+
 
 ## Local testing
 
